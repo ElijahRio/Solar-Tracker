@@ -14,6 +14,9 @@
   - Automatic Winter Hibernation (Nov-Feb) using RTC
   - High Wind Safety Override
   - Data Logging to SD Card (CSV format)
+  - Sensor Failure Redundancy (Time-based "Dead Reckoning")
+  - Strategic Dormancy (Low Light / Bad Weather)
+  - Serial Data Dump capability
 */
 
 #include <SPI.h>
@@ -31,7 +34,8 @@ enum State {
   STATE_TRACKING,       
   STATE_NIGHT_RESET,    
   STATE_WIND_SAFETY,    
-  STATE_WINTER_DORMANT, 
+  STATE_STRATEGIC_DORMANCY, // Renamed from WINTER_DORMANT to include weather
+  STATE_REDUNDANT,          // New: Sensor Failure Mode
   STATE_ERROR           
 };
 
@@ -48,7 +52,11 @@ const int CHIP_SELECT = 10; // CS pin for SD card (usually 10 on Shields)
 // --- CONFIGURATION ---
 const unsigned long TRACKING_INTERVAL = 600000; // 10 Minutes (ms)
 const int LDR_THRESHOLD = 50;
-const int LDR_MIN_VALID = 50;  
+const int LDR_MIN_VALID = 10;     // Lowered threshold, if < this, suspect broken wire (0)
+const int LDR_MAX_VALID = 1015;   // If > this, suspect short (1023)
+const unsigned long REDUNDANT_MOVE_TIME = 1000; // Time to move West in redundant mode (ms)
+const unsigned long WIND_SAFETY_DURATION = 30000; // Time to move West during wind alarm (ms)
+
 unsigned long lastTrackTime = 0;
 
 void setup() {
@@ -73,6 +81,16 @@ void setup() {
 
   // 3. SD CARD SETUP
   Serial.print("Initializing SD card...");
+  
+  // Check if new file, if so, write CSV Headers for Excel/Sheets
+  if (!SD.exists("datalog.csv")) {
+    File headerFile = SD.open("datalog.csv", FILE_WRITE);
+    if (headerFile) {
+      headerFile.println("Date,Time,Event,East,West,Diff");
+      headerFile.close();
+    }
+  }
+
   if (!SD.begin(CHIP_SELECT)) {
     Serial.println("Card failed, or not present");
     // We continue anyway, but logging won't work
@@ -88,12 +106,13 @@ void setup() {
   
   // Strategy: If month is Nov(11), Dec(12), Jan(1), Feb(2) -> Dormant
   if (currentMonth >= 11 || currentMonth <= 2) {
-    currentState = STATE_WINTER_DORMANT;
+    currentState = STATE_STRATEGIC_DORMANCY;
   }
 }
 
 void loop() {
-  checkGlobalSafety(); 
+  checkGlobalSafety();
+  checkSerialCommand(); // Check for 'd' to dump data
 
   switch (currentState) {
     case STATE_IDLE:
@@ -108,8 +127,11 @@ void loop() {
     case STATE_WIND_SAFETY:
       runWindSafetyState();
       break;
-    case STATE_WINTER_DORMANT:
-      runWinterState();
+    case STATE_STRATEGIC_DORMANCY:
+      runDormancyState();
+      break;
+    case STATE_REDUNDANT:
+      runRedundantState();
       break;
     case STATE_ERROR:
       runErrorState();
@@ -123,17 +145,30 @@ void runIdleState() {
   DateTime now = rtc.now();
   
   // 1. Check for Night Time (Reset Condition)
-  // If it's past 8 PM (20:00) AND we haven't reset yet...
-  // (Simplified for demo: just checking light levels is often safer)
+  // Simple check: if both sensors are dark
   int east = analogRead(LDR_EAST);
   int west = analogRead(LDR_WEST);
   
   if (east < 100 && west < 100) {
-    currentState = STATE_NIGHT_RESET;
-    return;
+    // Confirm it's actually evening (past 16:00) to avoid storm triggering reset
+    if (now.hour() > 16) {
+        currentState = STATE_NIGHT_RESET;
+        return;
+    } else {
+        // It's dark during the day? Strategic Dormancy (Storm/Cloud)
+        currentState = STATE_STRATEGIC_DORMANCY;
+        return;
+    }
   }
 
-  // 2. Check Timer for Tracking
+  // 2. Check Sensor Health
+  if (!isSensorOperational()) {
+      Serial.println("Sensors Failed! Switching to Redundancy.");
+      currentState = STATE_REDUNDANT;
+      return;
+  }
+
+  // 3. Check Timer for Tracking
   if (millis() - lastTrackTime > TRACKING_INTERVAL) {
     currentState = STATE_TRACKING;
   }
@@ -146,6 +181,12 @@ void runTrackingState() {
   
   // Log the attempt
   logData("TRACKING", east, west, diff);
+
+  if (!isSensorOperational()) {
+      stopMotor();
+      currentState = STATE_REDUNDANT;
+      return;
+  }
 
   if (abs(diff) <= LDR_THRESHOLD) {
     stopMotor();
@@ -164,35 +205,67 @@ void runTrackingState() {
   }
 }
 
-void runWinterState() {
-  // We only check the date once an hour to save power
-  // In reality, this loop runs fast, but we just do nothing.
-  
+void runDormancyState() {
+  // We only check occasionally to save power
   stopMotor(); // Ensure motor is off
   
-  // Check if it is March yet?
   DateTime now = rtc.now();
+  
+  // 1. Winter Check
   if (now.month() >= 3 && now.month() <= 10) {
-    Serial.println("Winter is over. Waking up.");
-    currentState = STATE_IDLE;
-  } else {
-    // Optional: Log once a day that we are still alive
-    if (now.minute() == 0 && now.second() == 0) {
-       logData("DORMANT", 0, 0, 0);
-       delay(1000); // Prevent double logging
+    // It's not Winter. Is it still dark?
+    int east = analogRead(LDR_EAST);
+    if (east > 200) { // Arbitrary "Light" threshold
+        Serial.println("Conditions improved. Waking up.");
+        currentState = STATE_IDLE;
+        return;
     }
+  }
+
+  // Log occasionally
+  if (now.minute() == 0 && now.second() == 0) {
+       logData("DORMANT", 0, 0, 0);
+       delay(1000); 
+  }
+}
+
+void runRedundantState() {
+  // Dead Reckoning: Move West a fixed amount every interval
+  if (millis() - lastTrackTime > TRACKING_INTERVAL) {
+      logData("REDUNDANT_MOVE", 0, 0, 0);
+      moveWest();
+      delay(REDUNDANT_MOVE_TIME);
+      stopMotor();
+      lastTrackTime = millis();
+      
+      // Check if night (by time, since sensors are dead)
+      DateTime now = rtc.now();
+      if (now.hour() >= 20) {
+          currentState = STATE_NIGHT_RESET;
+      }
   }
 }
 
 void runNightResetState() {
   logData("NIGHT_RESET", 0, 0, 0);
   moveEast();
-  delay(30000); // 30 seconds to retract fully
+  delay(30000); // 30 seconds to retract fully (Adjust based on Actuator speed/length)
   stopMotor();
   
-  // Wait for morning light
-  while (analogRead(LDR_EAST) < 150) {
-     checkGlobalSafety(); // Still watch for wind!
+  // Wait for morning light OR specific time if sensors are bad
+  while (true) {
+     checkGlobalSafety(); 
+     checkSerialCommand();
+     
+     int east = analogRead(LDR_EAST);
+     DateTime now = rtc.now();
+     
+     // Wake on Light
+     if (east > 150) break;
+     
+     // Wake on Time (Backup) - e.g. 7 AM
+     if (now.hour() == 7 && now.minute() == 0) break;
+     
      delay(5000);
   }
   currentState = STATE_IDLE;
@@ -200,24 +273,27 @@ void runNightResetState() {
 
 void runWindSafetyState() {
   logData("WIND_ALARM", 0, 0, 0);
+  
+  /* BLOCKED OUT FOR CALIBRATION
   moveWest(); // Move to flat/safe position
-  delay(30000);
+  delay(WIND_SAFETY_DURATION); // Fully extend? Or retract? depends on mechanical setup.
+                // Usually horizontal (noon position) is safest for wind load vs dragged, 
+                // or fully retracted (East) to present edge.
+                // Assuming West/Extended is flat for this setup.
   stopMotor();
+  */
   
   while (digitalRead(WIND_SENSOR_PIN) == HIGH) {
+    checkSerialCommand();
     delay(1000);
   }
-  currentState = STATE_IDLE;
+  currentState = STATE_IDLE; // Return to operation when wind stops
 }
 
 void runErrorState() {
   stopMotor();
-  Serial.println("SENSOR ERROR");
-  // Try to re-read
+  Serial.println("CRITICAL ERROR");
   delay(5000);
-  if (analogRead(LDR_EAST) > LDR_MIN_VALID) {
-    currentState = STATE_IDLE;
-  }
 }
 
 // --- HELPER FUNCTIONS ---
@@ -226,6 +302,40 @@ void checkGlobalSafety() {
   if (digitalRead(WIND_SENSOR_PIN) == HIGH) { // Assuming HIGH = Wind
     currentState = STATE_WIND_SAFETY;
   }
+}
+
+bool isSensorOperational() {
+   int e = analogRead(LDR_EAST);
+   int w = analogRead(LDR_WEST);
+   
+   // Check for disconnected/shorted wires
+   if (e < LDR_MIN_VALID || e > LDR_MAX_VALID) return false;
+   if (w < LDR_MIN_VALID || w > LDR_MAX_VALID) return false;
+   
+   return true;
+}
+
+void checkSerialCommand() {
+    if (Serial.available() > 0) {
+        char c = Serial.read();
+        if (c == 'd' || c == 'D') {
+            dumpDataLog();
+        }
+    }
+}
+
+void dumpDataLog() {
+    Serial.println("\n--- DATA DUMP START ---");
+    File dumpFile = SD.open("datalog.csv");
+    if (dumpFile) {
+        while (dumpFile.available()) {
+            Serial.write(dumpFile.read());
+        }
+        dumpFile.close();
+    } else {
+        Serial.println("Error opening datalog.csv for reading.");
+    }
+    Serial.println("\n--- DATA DUMP END ---");
 }
 
 void logData(String mode, int e, int w, int d) {
@@ -254,7 +364,7 @@ void logData(String mode, int e, int w, int d) {
     dataFile.close();
     
     // Also print to Serial for debugging
-    Serial.println("Data logged.");
+    Serial.print("LOGGED: "); Serial.println(mode);
   } else {
     Serial.println("Error opening datalog.csv");
   }
