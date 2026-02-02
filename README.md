@@ -18,6 +18,7 @@ The system uses Light Dependent Resistors (LDRs) to track the sun's position and
 *   **Strategic Dormancy:** Enters dormancy during low-light days (storms/heavy clouds) to save power.
 *   **Data Logging:** Logs all events, sensor readings, and movements to an SD card in CSV format.
 *   **Night Reset:** Automatically resets the panel to the East position at night, ready for the next morning.
+*   **Optimized Logging:** Uses efficient string handling to minimize memory usage and maximize performance.
 
 ## Hardware Requirements
 
