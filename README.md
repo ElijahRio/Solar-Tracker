@@ -1,95 +1,103 @@
-# Seasonal Autonomous Solar Tracker
+# Project Hub: Seasonal Solar Tracker
 
-**Mechatronics 400 Student Project**
-**Author:** Richard Riordan
+**Student:** Richard
+**Mentor:** Mechatronics Project 400
+**Project Goal:** To design and build a data-driven, fully autonomous, off-grid solar power system, strategically optimized for the unique challenges of the Irish climate.
 
-## Overview
+## 1. Core Project Strategy
 
-This project implements a robust, autonomous solar tracking system using an Arduino. It is designed to maximize solar panel efficiency while incorporating advanced features for weather safety, seasonal energy preservation (hibernation), and hardware failure redundancy.
+*   **Operational Window:** Seasonal (March - October). This is a strategic decision based on the "Seasonal Solar Tracker" analysis to maximize performance, reduce cost by 35%, and increase reliability.
+*   **System Autonomy Target:** 5+ days. The system is designed to run all loads for over 5 days with zero solar input, making it robust against prolonged cloudy weather.
+*   **Location:** Longitude 53.006510, Latitude -6.650966, Ireland. Design choices are optimized for this specific latitude and climate.
 
-The system uses Light Dependent Resistors (LDRs) to track the sun's position and a linear actuator to adjust the panel's angle. It intelligently manages power by sleeping between moves and entering a dormant state during winter months or low-light conditions.
+## 2. Mechanical System Design
 
-## Key Features
+*   **Panel Mounting:** Single-axis tracking (East-to-West) with a manual tilt adjustment mechanism.
+    *   *Rationale:* Provides the majority of tracking energy gains (approx. 30%) without the high cost and complexity of a full dual-axis system.
+*   **Manual Tilt:** The frame will allow for two tilt angle settings to optimize for different sun heights:
+    *   *Spring/Autumn Setting (Mar-Apr, Sep-Oct):* Steeper angle (~50-55°).
+    *   *Summer Setting (May-Aug):* Shallower angle (~35-40°).
+*   **Rotation Mechanism:** 12V DC Linear Actuator.
+    *   *Rationale:* Chosen for its extreme power efficiency (uses ~11% of daily power budget vs. a servo's ~69%), which is the critical factor in achieving the 5-day autonomy goal. It is also strong and self-locking against wind.
+    *   *Specification:* 12V DC Linear Actuator, 250mm stroke, 500N force, slow travel speed (5-10mm/s), with built-in limit switches and an IP65 weather rating.
 
-*   **Interval Tracking:** Moves every 10 minutes to maintain ~95% efficiency while reducing power consumption.
-*   **Automatic Winter Hibernation:** Automatically detects winter months (November - February) via RTC and enters a low-power dormant mode.
-*   **Wind Safety Override:** Detects high wind conditions and moves the panel to a safe position to prevent damage.
-*   **Sensor Redundancy:** Falls back to "Dead Reckoning" (time-based movement) if light sensors fail or provide inconsistent readings.
-*   **Strategic Dormancy:** Enters dormancy during low-light days (storms/heavy clouds) to save power.
-*   **Data Logging:** Logs all events, sensor readings, and movements to an SD card in CSV format.
-*   **Night Reset:** Automatically resets the panel to the East position at night, ready for the next morning.
-*   **Optimized Logging:** Uses efficient string handling to minimize memory usage and maximize performance.
+## 3. Electrical System Design
 
-## Hardware Requirements
+*   **System Voltage:** 12V DC. All components are specified for a 12V nominal system.
+*   **Power Generation:** Renogy 50W, 12V Monocrystalline Rigid Solar Panel.
+*   **Power Storage:** 25Ah, 12V LiFePO4 (Lithium Iron Phosphate) Battery. Chosen for its long lifespan, safety, and cycle durability. Higher capacity (e.g., 30Ah) is acceptable if 25Ah is unavailable.
+*   **Power Management:** MPPT Solar Charge Controller (e.g., Victron 75/15). (Upgraded from PWM for superior low-light efficiency and data monitoring).
+*   **Power Distribution:** A central dual-row bus bar / terminal strip to provide a clean and organized 12V distribution hub for all loads.
 
-*   **Microcontroller:** Arduino UNO or Mega.
-*   **Shield:** Data Logging Shield (containing SD Card slot + RTC).
-    *   *Note:* Requires CR1220 coin cell battery for RTC.
-*   **Sensors:**
-    *   2x LDRs (Light Dependent Resistors) for East/West detection.
-    *   Wind Sensor (Switch type).
-*   **Actuation:**
-    *   Motor Driver.
-    *   Linear Actuator.
-*   **Power Supply:** Appropriate power for the Arduino and Motor/Actuator.
+## 4. Control & Sensing System
 
-## Pin Configuration
+*   **Microcontroller:** Arduino UNO R3 (or Mega).
+*   **Data & Time:** Data Logging Shield add-on, which includes a Real-Time Clock (RTC) and an SD card slot.
+    *   *Library:* `RTClib` (Adafruit), `SD`.
+*   **RTC Battery:** Requires a CR1220 3V coin cell battery.
+*   **Sun Sensing:** Differential light sensor using two 5mm LDRs.
+    *   *Configuration:* The two LDRs are placed side-by-side, separated by a small fin to cast a shadow, creating a highly sensitive direction sensor.
+    *   *Circuit:* Each LDR is wired in a voltage divider circuit with a 10kΩ resistor.
+*   **Wind Sensing:** Digital input (Switch) on Pin 2.
+    *   *Status:* Implemented in software (`STATE_WIND_SAFETY`).
+
+### Pin Configuration
 
 | Component | Arduino Pin | Description |
 | :--- | :--- | :--- |
-| **LDR East** | A0 | Analog input for East light sensor |
-| **LDR West** | A1 | Analog input for West light sensor |
-| **Wind Sensor** | 2 | Digital Input (Input Pullup, Active HIGH) |
-| **Actuator Extend** | 9 | Digital Output to Motor Driver |
-| **Actuator Retract** | 10 | Digital Output to Motor Driver |
-| **SD Card CS** | 10 | Chip Select for SD Card |
+| **LDR East** | A0 | Analog Input |
+| **LDR West** | A1 | Analog Input |
+| **Wind Sensor** | 2 | Digital Input (Active HIGH) |
+| **Actuator Extend** | 9 | Digital Output |
+| **Actuator Retract** | 8 | Digital Output |
+| **SD Card CS** | 10 | SPI Chip Select |
 
-> **⚠️ Warning:** The current code defines both `ACT_RETRACT` and `CHIP_SELECT` on Pin 10. This is likely a conflict if using a standard Data Logging Shield which requires Pin 10 for CS. Please verify your wiring and adjust `ACT_RETRACT` to an available digital pin (e.g., Pin 8) if necessary.
+## 5. Safety & Best Practices
 
-## Software Dependencies
+*   **Master Power Control:** A heavy-duty Battery Isolator Switch ("Kill Switch") rated for >20A will be installed on the positive line from the battery.
+*   **Circuit Protection:** A 15A automotive blade fuse will be installed in-line between the master switch and the battery's positive terminal.
+*   **Enclosures:**
+    *   *Electronics:* A single weatherproof IP65-rated enclosure will house the Charge Controller, Arduino, H-Bridge, and Bus Bar.
+    *   *Battery:* The battery will be housed in a separate, adjacent, ventilated enclosure for maximum safety.
+*   **Wiring Standards (European):**
+    *   *High Power (Zone 1):* 2.5 mm² solar cable.
+    *   *Load Distribution (Zone 2):* 0.75 mm² equipment wire.
+    *   *Signal Wires (Zone 3):* 0.5 mm² (22 AWG) jumper wires.
+    *   *Colour Code:* Red (Power+), Black (Ground-), Other Colours (Signals).
 
-Ensure the following libraries are installed in your Arduino IDE:
+## 6. System Logic & Software
 
-1.  **RTClib** (by Adafruit) - For Real Time Clock management.
-2.  **SD** (Standard Arduino Library) - For SD card logging.
-3.  **SPI** (Standard Arduino Library) - For SPI communication.
-4.  **Wire** (Standard Arduino Library) - For I2C communication.
+*   **Application:** Arduino IDE.
+*   **Download Location:** https://www.google.com/search?q=https://www.arduino.cc/software
+*   **Programming Language:** C++ (simplified for Arduino).
+*   **Dependencies:** `SPI`, `SD`, `Wire`, `RTClib`.
 
-## System Logic (State Machine)
+### Core Logic (State Machine)
 
-The system operates based on a finite state machine:
+The Arduino runs a continuous loop managing the following states:
 
-1.  **STATE_IDLE:** Monitors sensors and time. Waits for the tracking interval or specific conditions (Night, Wind).
-2.  **STATE_TRACKING:** Actively reads LDRs and adjusts the actuator to minimize the difference between East and West sensors.
-3.  **STATE_NIGHT_RESET:** Moves the panel back to the East position after sunset.
-4.  **STATE_WIND_SAFETY:** Triggered by the wind sensor. Moves panel to a safety position until wind subsides.
-5.  **STATE_STRATEGIC_DORMANCY:** Used during Winter (Nov-Feb) or extremely dark days. Minimizes movement to save power.
-6.  **STATE_REDUNDANT:** Backup mode. If sensors fail, the system moves the panel West by a fixed amount based on time ("Dead Reckoning").
-7.  **STATE_ERROR:** Critical failure state (e.g., RTC missing).
+1.  **STATE_IDLE:**
+    *   Checks time and sensors.
+    *   Triggers `STATE_NIGHT_RESET` if dark and past 16:00.
+    *   Triggers `STATE_TRACKING` every 10 minutes (600,000 ms).
+2.  **STATE_TRACKING:**
+    *   Reads East/West LDRs.
+    *   Moves Actuator to minimize light difference.
+    *   Sleeps if difference is within threshold.
+3.  **STATE_NIGHT_RESET:**
+    *   Retracts actuator (Moves East) for 30 seconds.
+    *   Waits for morning light (>150 value) or 7:00 AM backup.
+4.  **STATE_WIND_SAFETY:**
+    *   Triggered if Wind Sensor (Pin 2) is HIGH.
+    *   Holds position (or moves to safety) until wind stops.
+5.  **STATE_STRATEGIC_DORMANCY:**
+    *   **Winter:** Nov-Feb. Sleeps to save power.
+    *   **Dark Days:** If light is too low during day, enters dormancy.
+6.  **STATE_REDUNDANT:**
+    *   Triggered if sensors fail (readings < 10 or > 1015).
+    *   Uses "Dead Reckoning" to move West by time (1000ms move / 10 mins).
 
-## Data Logging
-
-The system logs data to `datalog.csv` on the SD card.
-**Format:** `Date,Time,Event,East,West,Diff`
-
-**Example Log:**
-```csv
-2023/10/15,10:30,TRACKING,800,750,50
-2023/10/15,10:40,TRACKING,810,810,0
-2023/10/15,18:00,NIGHT_RESET,100,80,20
-```
-
-### Serial Data Dump
-You can retrieve the logged data without removing the SD card by sending the character `'d'` or `'D'` via the Serial Monitor.
-
-## Setup Instructions
-
-1.  **Install Libraries:** Use the Arduino Library Manager to install `RTClib`.
-2.  **Wiring:** Connect components according to the Pin Configuration table (mind the Pin 10 conflict note).
-3.  **RTC Setup:** Insert the CR1220 battery. The code will automatically set the RTC to the compile time if it detects the clock has stopped.
-4.  **Upload:** Connect the Arduino via USB and upload `main.cpp`.
-5.  **Monitor:** Open Serial Monitor at **9600 baud** to view system status and debug messages.
-
-## License
-
-This project is open for educational use.
+### Data Logging
+*   Logs to `datalog.csv` on SD Card.
+*   Format: `Date,Time,Event,East,West,Diff`
+*   **Serial Dump:** Send 'd' in Serial Monitor to read log.

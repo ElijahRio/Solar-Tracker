@@ -45,7 +45,7 @@ State currentState = STATE_IDLE;
 const int LDR_EAST = A0;
 const int LDR_WEST = A1;
 const int ACT_EXTEND = 9;  
-const int ACT_RETRACT = 10; // FIXME: Conflict with CHIP_SELECT (Pin 10). Adjust wiring!
+const int ACT_RETRACT = 8;
 const int WIND_SENSOR_PIN = 2; 
 const int CHIP_SELECT = 10; // CS pin for SD card (usually 10 on Shields)
 
