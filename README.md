@@ -68,7 +68,7 @@
 ## 6. System Logic & Software
 
 *   **Application:** Arduino IDE.
-*   **Download Location:** https://www.google.com/search?q=https://www.arduino.cc/software
+*   **Download Location:** https://www.arduino.cc/software
 *   **Programming Language:** C++ (simplified for Arduino).
 *   **Dependencies:** `SPI`, `SD`, `Wire`, `RTClib`.
 
