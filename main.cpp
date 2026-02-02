@@ -45,7 +45,7 @@ State currentState = STATE_IDLE;
 const int LDR_EAST = A0;
 const int LDR_WEST = A1;
 const int ACT_EXTEND = 9;  
-const int ACT_RETRACT = 10; 
+const int ACT_RETRACT = 10; // FIXME: Conflict with CHIP_SELECT (Pin 10). Adjust wiring!
 const int WIND_SENSOR_PIN = 2; 
 const int CHIP_SELECT = 10; // CS pin for SD card (usually 10 on Shields)
 
@@ -58,6 +58,23 @@ const unsigned long REDUNDANT_MOVE_TIME = 1000; // Time to move West in redundan
 const unsigned long WIND_SAFETY_DURATION = 30000; // Time to move West during wind alarm (ms)
 
 unsigned long lastTrackTime = 0;
+
+// --- FUNCTION PROTOTYPES ---
+void checkGlobalSafety();
+void checkSerialCommand();
+void dumpDataLog();
+void logData(const char* mode, int e, int w, int d);
+void runIdleState();
+void runTrackingState();
+void runNightResetState();
+void runWindSafetyState();
+void runDormancyState();
+void runRedundantState();
+void runErrorState();
+bool isSensorOperational();
+void moveWest();
+void moveEast();
+void stopMotor();
 
 void setup() {
   Serial.begin(9600);
@@ -343,7 +360,7 @@ void dumpDataLog() {
     Serial.println("\n--- DATA DUMP END ---");
 }
 
-void logData(String mode, int e, int w, int d) {
+void logData(const char* mode, int e, int w, int d) {
   // Format: Date, Time, Mode, East, West, Diff
   DateTime now = rtc.now();
   
