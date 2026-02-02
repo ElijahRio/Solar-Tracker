@@ -328,8 +328,13 @@ void dumpDataLog() {
     Serial.println("\n--- DATA DUMP START ---");
     File dumpFile = SD.open("datalog.csv");
     if (dumpFile) {
+        const size_t bufSize = 64;
+        uint8_t buf[bufSize];
         while (dumpFile.available()) {
-            Serial.write(dumpFile.read());
+            int bytesRead = dumpFile.read(buf, bufSize);
+            if (bytesRead > 0) {
+                Serial.write(buf, bytesRead);
+            }
         }
         dumpFile.close();
     } else {
