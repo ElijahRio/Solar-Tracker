@@ -7,16 +7,16 @@
   2. Data Logging Shield (SD Card + RTC) with CR1220 battery installed.
   3. LDR Sensors (East/West)
   4. Motor Driver + Linear Actuator
-  5. Wind Sensor (Switch)
+  5. LED Lights (Pin 7)
   
   FEATURES:
   - 95% Efficiency Interval Tracking (Sleeps 10 mins between moves)
   - Automatic Winter Hibernation (Nov-Feb) using RTC
-  - High Wind Safety Override
   - Data Logging to SD Card (CSV format)
   - Sensor Failure Redundancy (Time-based "Dead Reckoning")
   - Strategic Dormancy (Low Light / Bad Weather)
   - Serial Data Dump capability
+  - Evening Lighting Logic (LEDs ON for 4h or until Midnight)
 */
 
 #include <SPI.h>
@@ -33,20 +33,22 @@ enum State {
   STATE_IDLE,           
   STATE_TRACKING,       
   STATE_NIGHT_RESET,    
-  STATE_WIND_SAFETY,    
   STATE_STRATEGIC_DORMANCY, // Renamed from WINTER_DORMANT to include weather
   STATE_REDUNDANT,          // New: Sensor Failure Mode
   STATE_ERROR           
 };
 
 State currentState = STATE_IDLE;
+bool nightModeInitialized = false;
+unsigned long nightEntryTime = 0;
+unsigned long ledStartTime = 0;
 
 // --- PIN DEFINITIONS ---
 const int LDR_EAST = A0;
 const int LDR_WEST = A1;
 const int ACT_EXTEND = 9;  
 const int ACT_RETRACT = 8;
-const int WIND_SENSOR_PIN = 2; 
+const int LED_PIN = 7;
 const int CHIP_SELECT = 10; // CS pin for SD card (usually 10 on Shields)
 
 // --- CONFIGURATION ---
@@ -55,19 +57,16 @@ const int LDR_THRESHOLD = 50;
 const int LDR_MIN_VALID = 10;     // Lowered threshold, if < this, suspect broken wire (0)
 const int LDR_MAX_VALID = 1015;   // If > this, suspect short (1023)
 const unsigned long REDUNDANT_MOVE_TIME = 1000; // Time to move West in redundant mode (ms)
-const unsigned long WIND_SAFETY_DURATION = 30000; // Time to move West during wind alarm (ms)
 
 unsigned long lastTrackTime = 0;
 
 // --- FUNCTION PROTOTYPES ---
-void checkGlobalSafety();
 void checkSerialCommand();
 void dumpDataLog();
 void logData(const char* mode, int e, int w, int d);
 void runIdleState();
 void runTrackingState();
 void runNightResetState();
-void runWindSafetyState();
 void runDormancyState();
 void runRedundantState();
 void runErrorState();
@@ -83,7 +82,7 @@ void setup() {
   // 1. PIN SETUP
   pinMode(ACT_EXTEND, OUTPUT);
   pinMode(ACT_RETRACT, OUTPUT);
-  pinMode(WIND_SENSOR_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
   pinMode(CHIP_SELECT, OUTPUT); // Required for SD card
 
   // 2. RTC SETUP
@@ -128,7 +127,6 @@ void setup() {
 }
 
 void loop() {
-  checkGlobalSafety();
   checkSerialCommand(); // Check for 'd' to dump data
 
   switch (currentState) {
@@ -140,9 +138,6 @@ void loop() {
       break;
     case STATE_NIGHT_RESET:
       runNightResetState();
-      break;
-    case STATE_WIND_SAFETY:
-      runWindSafetyState();
       break;
     case STATE_STRATEGIC_DORMANCY:
       runDormancyState();
@@ -166,10 +161,12 @@ void runIdleState() {
   int east = analogRead(LDR_EAST);
   int west = analogRead(LDR_WEST);
   
+  // Note: 100 is a baseline threshold for darkness as per user requirement.
   if (east < 100 && west < 100) {
     // Confirm it's actually evening (past 16:00) to avoid storm triggering reset
     if (now.hour() > 16) {
         currentState = STATE_NIGHT_RESET;
+        nightModeInitialized = false; // Trigger initialization in next state
         return;
     } else {
         // It's dark during the day? Strategic Dormancy (Storm/Cloud)
@@ -259,52 +256,56 @@ void runRedundantState() {
       DateTime now = rtc.now();
       if (now.hour() >= 20) {
           currentState = STATE_NIGHT_RESET;
+          nightModeInitialized = false;
       }
   }
 }
 
 void runNightResetState() {
-  logData("NIGHT_RESET", 0, 0, 0);
-  moveEast();
-  delay(30000); // 30 seconds to retract fully (Adjust based on Actuator speed/length)
-  stopMotor();
-  
-  // Wait for morning light OR specific time if sensors are bad
-  while (true) {
-     checkGlobalSafety(); 
-     checkSerialCommand();
-     
-     int east = analogRead(LDR_EAST);
-     DateTime now = rtc.now();
-     
-     // Wake on Light
-     if (east > 150) break;
-     
-     // Wake on Time (Backup) - e.g. 7 AM
-     if (now.hour() == 7 && now.minute() == 0) break;
-     
-     delay(5000);
-  }
-  currentState = STATE_IDLE;
-}
+  DateTime now = rtc.now();
 
-void runWindSafetyState() {
-  logData("WIND_ALARM", 0, 0, 0);
-  
-  /* BLOCKED OUT FOR CALIBRATION
-  moveWest(); // Move to flat/safe position
-  delay(WIND_SAFETY_DURATION); // Fully extend? Or retract? depends on mechanical setup.
-                // Usually horizontal (noon position) is safest for wind load vs dragged, 
-                // or fully retracted (East) to present edge.
-                // Assuming West/Extended is flat for this setup.
-  stopMotor();
-  */
-  
-  while (digitalRead(WIND_SENSOR_PIN) == HIGH) {
-    checkSerialCommand();
-    delay(1000);
+  // Initialization Phase
+  if (!nightModeInitialized) {
+      logData("NIGHT_RESET_INIT", 0, 0, 0);
+
+      // Turn on LEDs
+      digitalWrite(LED_PIN, HIGH);
+      ledStartTime = millis(); // Record LED ON time
+
+      // Start Retracting (Move East)
+      moveEast();
+      nightEntryTime = millis(); // Record Retract Start time
+
+      nightModeInitialized = true;
   }
-  currentState = STATE_IDLE; // Return to operation when wind stops
+
+  // Retraction Phase
+  // Retract for 30 seconds
+  if (millis() - nightEntryTime < 30000) {
+      // Still retracting, do nothing (motor is already moving East)
+  } else {
+      stopMotor(); // Done retracting
+  }
+
+  // LED Logic Phase
+  // Check Duration Limit (4 hours = 14400000 ms)
+  // Check Midnight Limit (hour == 0)
+  bool timeLimitReached = (millis() - ledStartTime > 14400000);
+  bool midnightReached = (now.hour() == 0);
+
+  if (timeLimitReached || midnightReached) {
+      digitalWrite(LED_PIN, LOW);
+  }
+
+  // Morning Check Phase
+  int east = analogRead(LDR_EAST);
+  
+  // Wake on Light (> 150) OR Time (7 AM)
+  if (east > 150 || (now.hour() == 7 && now.minute() == 0)) {
+       digitalWrite(LED_PIN, LOW); // Ensure LEDs off
+       currentState = STATE_IDLE;
+       logData("WAKE_UP", east, 0, 0);
+  }
 }
 
 void runErrorState() {
@@ -314,12 +315,6 @@ void runErrorState() {
 }
 
 // --- HELPER FUNCTIONS ---
-
-void checkGlobalSafety() {
-  if (digitalRead(WIND_SENSOR_PIN) == HIGH) { // Assuming HIGH = Wind
-    currentState = STATE_WIND_SAFETY;
-  }
-}
 
 bool isSensorOperational() {
    int e = analogRead(LDR_EAST);
