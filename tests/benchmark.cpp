@@ -10,17 +10,13 @@
 #include "Wire.h"
 
 // Define global mock objects
-SerialClass Serial;
 SDClass SD;
-volatile int mock_sink = 0;
 
 // Forward declarations for functions in main.cpp (required because they are not declared in main.cpp before use, relying on Arduino IDE)
-void checkGlobalSafety();
 void checkSerialCommand();
 void runIdleState();
 void runTrackingState();
 void runNightResetState();
-void runWindSafetyState();
 void runDormancyState();
 void runRedundantState();
 void runErrorState();
