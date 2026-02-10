@@ -71,7 +71,7 @@ void runWindSafetyState();
 void runDormancyState();
 void runRedundantState();
 void runErrorState();
-bool isSensorOperational();
+bool isSensorOperational(int e, int w);
 void moveWest();
 void moveEast();
 void stopMotor();
@@ -179,7 +179,7 @@ void runIdleState() {
   }
 
   // 2. Check Sensor Health
-  if (!isSensorOperational()) {
+  if (!isSensorOperational(east, west)) {
       Serial.println("Sensors Failed! Switching to Redundancy.");
       currentState = STATE_REDUNDANT;
       return;
@@ -199,7 +199,7 @@ void runTrackingState() {
   // Log the attempt
   logData("TRACKING", east, west, diff);
 
-  if (!isSensorOperational()) {
+  if (!isSensorOperational(east, west)) {
       stopMotor();
       currentState = STATE_REDUNDANT;
       return;
@@ -321,10 +321,7 @@ void checkGlobalSafety() {
   }
 }
 
-bool isSensorOperational() {
-   int e = analogRead(LDR_EAST);
-   int w = analogRead(LDR_WEST);
-   
+bool isSensorOperational(int e, int w) {
    // Check for disconnected/shorted wires
    if (e < LDR_MIN_VALID || e > LDR_MAX_VALID) return false;
    if (w < LDR_MIN_VALID || w > LDR_MAX_VALID) return false;

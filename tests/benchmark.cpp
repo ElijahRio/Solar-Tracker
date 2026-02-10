@@ -24,7 +24,7 @@ void runWindSafetyState();
 void runDormancyState();
 void runRedundantState();
 void runErrorState();
-bool isSensorOperational();
+bool isSensorOperational(int e, int w);
 void stopMotor();
 void moveWest();
 void moveEast();
@@ -33,7 +33,7 @@ void logData(const char* mode, int e, int w, int d);
 
 // Include the application code
 // We define a macro to prevent duplicate main if we were linking, but here we include cpp.
-#include "../../main.cpp"
+#include "../main.cpp"
 
 int main() {
     std::cout << "Starting Benchmark..." << std::endl;

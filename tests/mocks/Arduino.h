@@ -66,14 +66,16 @@ public:
 };
 
 extern SerialClass Serial;
+extern unsigned long mock_millis;
+extern int mock_analog_val;
 
 // Mock functions
-inline unsigned long millis() { return 0; }
-inline void delay(unsigned long ms) {}
+inline unsigned long millis() { return mock_millis; }
+inline void delay(unsigned long ms) { mock_millis += ms; }
 inline void pinMode(int pin, int mode) {}
 inline void digitalWrite(int pin, int val) {}
 inline int digitalRead(int pin) { return LOW; }
-inline int analogRead(int pin) { return 0; }
+int analogRead(int pin);
 inline int abs(int x) { return x > 0 ? x : -x; }
 inline const char* F(const char* s) { return s; } // F() macro
 
