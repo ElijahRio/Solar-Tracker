@@ -1,103 +1,58 @@
-# Project Hub: Seasonal Solar Tracker
+# Technical Manual: Seasonal Autonomous Solar Tracker
 
+**Project:** Mechatronics 400 (Irish Climate Optimized)
 **Student:** Richard
 **Mentor:** Mechatronics Project 400
-**Project Goal:** To design and build a data-driven, fully autonomous, off-grid solar power system, strategically optimized for the unique challenges of the Irish climate.
 
-## 1. Core Project Strategy
+This manual consolidates the system architecture, electrical logic, and physical assembly protocols for the Seasonal Solar Tracker.
 
-*   **Operational Window:** Seasonal (March - October). This is a strategic decision based on the "Seasonal Solar Tracker" analysis to maximize performance, reduce cost by 35%, and increase reliability.
-*   **System Autonomy Target:** 5+ days. The system is designed to run all loads for over 5 days with zero solar input, making it robust against prolonged cloudy weather.
-*   **Location:** Longitude 53.006510, Latitude -6.650966, Ireland. Design choices are optimized for this specific latitude and climate.
+## 1. Assembly Overview (Quick Steps)
 
-## 2. Mechanical System Design
+*   **Infrastructure:** Set up the 12V Power Bus and Master Kill Switch.
+*   **Logic Core:** Stack the Data Logger Shield onto the Arduino and provide 12V power.
+*   **Sensing:** Install LDRs and Wind Sensor with appropriate resistors/pull-ups.
+*   **Motion:** Connect the H-Bridge logic pins to the Arduino and power pins to the Bus Bar.
+*   **Actuation:** Connect the Linear Actuator to the H-Bridge output.
 
-*   **Panel Mounting:** Single-axis tracking (East-to-West) with a manual tilt adjustment mechanism.
-    *   *Rationale:* Provides the majority of tracking energy gains (approx. 30%) without the high cost and complexity of a full dual-axis system.
-*   **Manual Tilt:** The frame will allow for two tilt angle settings to optimize for different sun heights:
-    *   *Spring/Autumn Setting (Mar-Apr, Sep-Oct):* Steeper angle (~50-55°).
-    *   *Summer Setting (May-Aug):* Shallower angle (~35-40°).
-*   **Rotation Mechanism:** 12V DC Linear Actuator.
-    *   *Rationale:* Chosen for its extreme power efficiency (uses ~11% of daily power budget vs. a servo's ~69%), which is the critical factor in achieving the 5-day autonomy goal. It is also strong and self-locking against wind.
-    *   *Specification:* 12V DC Linear Actuator, 250mm stroke, 500N force, slow travel speed (5-10mm/s), with built-in limit switches and an IP65 weather rating.
+## 2. Hardware Logic & Pin Reference
 
-## 3. Electrical System Design
+The software (`main.cpp`) is configured to interact with the following pins. Accuracy here is critical for the state machine to function.
 
-*   **System Voltage:** 12V DC. All components are specified for a 12V nominal system.
-*   **Power Generation:** Renogy 50W, 12V Monocrystalline Rigid Solar Panel.
-*   **Power Storage:** 25Ah, 12V LiFePO4 (Lithium Iron Phosphate) Battery. Chosen for its long lifespan, safety, and cycle durability. Higher capacity (e.g., 30Ah) is acceptable if 25Ah is unavailable.
-*   **Power Management:** MPPT Solar Charge Controller (e.g., Victron 75/15). (Upgraded from PWM for superior low-light efficiency and data monitoring).
-*   **Power Distribution:** A central dual-row bus bar / terminal strip to provide a clean and organized 12V distribution hub for all loads.
-
-## 4. Control & Sensing System
-
-*   **Microcontroller:** Arduino UNO R3 (or Mega).
-*   **Data & Time:** Data Logging Shield add-on, which includes a Real-Time Clock (RTC) and an SD card slot.
-    *   *Library:* `RTClib` (Adafruit), `SD`.
-*   **RTC Battery:** Requires a CR1220 3V coin cell battery.
-*   **Sun Sensing:** Differential light sensor using two 5mm LDRs.
-    *   *Configuration:* The two LDRs are placed side-by-side, separated by a small fin to cast a shadow, creating a highly sensitive direction sensor.
-    *   *Circuit:* Each LDR is wired in a voltage divider circuit with a 10kΩ resistor.
-*   **Wind Sensing:** Digital input (Switch) on Pin 2.
-    *   *Status:* Implemented in software (`STATE_WIND_SAFETY`).
-
-### Pin Configuration
-
-| Component | Arduino Pin | Description |
+| Pin | Role | Electronic Logic |
 | :--- | :--- | :--- |
-| **LDR East** | A0 | Analog Input |
-| **LDR West** | A1 | Analog Input |
-| **Wind Sensor** | 2 | Digital Input (Active HIGH) |
-| **Actuator Extend** | 9 | Digital Output |
-| **Actuator Retract** | 8 | Digital Output |
-| **SD Card CS** | 10 | SPI Chip Select |
+| **A0** | LDR East | Analog (0-1023). Higher value = more light. |
+| **A1** | LDR West | Analog (0-1023). |
+| **D2** | Wind Sensor | Digital. INPUT_PULLUP (HIGH by default, LOW on trigger). |
+| **D8** | Retract Cmd | Digital Out. Triggers H-Bridge to move East. |
+| **D9** | Extend Cmd | Digital Out. Triggers H-Bridge to move West. |
+| **D10** | SD Chip Select | SPI Communication for data logging. |
+| **A4/A5** | I2C (RTC) | Timekeeping communication (DS1307). |
 
-## 5. Safety & Best Practices
+## 3. Detailed Wiring Protocol
 
-*   **Master Power Control:** A heavy-duty Battery Isolator Switch ("Kill Switch") rated for >20A will be installed on the positive line from the battery.
-*   **Circuit Protection:** A 15A automotive blade fuse will be installed in-line between the master switch and the battery's positive terminal.
-*   **Enclosures:**
-    *   *Electronics:* A single weatherproof IP65-rated enclosure will house the Charge Controller, Arduino, H-Bridge, and Bus Bar.
-    *   *Battery:* The battery will be housed in a separate, adjacent, ventilated enclosure for maximum safety.
-*   **Wiring Standards (European):**
-    *   *High Power (Zone 1):* 2.5 mm² solar cable.
-    *   *Load Distribution (Zone 2):* 0.75 mm² equipment wire.
-    *   *Signal Wires (Zone 3):* 0.5 mm² (22 AWG) jumper wires.
-    *   *Colour Code:* Red (Power+), Black (Ground-), Other Colours (Signals).
+### Phase 1: The 12V Power Rail
+*   **Safety First:** Install the Master Kill Switch on the positive battery lead, followed immediately by a 15A Fuse.
+*   **Bus Bars:** All components must share a Common Ground. Connect the negative terminal of the battery to your negative bus bar. Every "GND" wire in the system connects here.
 
-## 6. System Logic & Software
+### Phase 2: The Sensor Subsystem
+*   **LDR Voltage Dividers:** Connect one leg of each LDR to 5V. Connect the other leg to the analog pin (A0/A1) and a 10kΩ resistor going to GND. This converts light resistance into measurable voltage.
+*   **Wind Safety:** Connect the wind switch between Pin 2 and GND. The internal pull-up handles the logic; the switch simply closes the circuit to trigger `STATE_WIND_SAFETY`.
 
-*   **Application:** Arduino IDE.
-*   **Download Location:** https://www.arduino.cc/software
-*   **Programming Language:** C++ (simplified for Arduino).
-*   **Dependencies:** `SPI`, `SD`, `Wire`, `RTClib`.
+### Phase 3: The H-Bridge & Actuator
+The H-Bridge is the high-power interface. It uses three distinct connection "clusters":
 
-### Core Logic (State Machine)
+*   **Logic Cluster (Header Pins):**
+    *   IN1 (or PWM A) → Arduino D9 (Extend).
+    *   IN2 (or PWM B) → Arduino D8 (Retract).
+    *   GND → Arduino GND (for signal reference).
+*   **Power Cluster (Screw Terminals):**
+    *   VCC/12V → Positive (+) Bus Bar.
+    *   GND → Negative (-) Bus Bar.
+*   **Motor Cluster (Screw Terminals):**
+    *   OUT1/OUT2 → The two wires of the Linear Actuator.
 
-The Arduino runs a continuous loop managing the following states:
+## 4. Operational Strategy: The Irish Context
 
-1.  **STATE_IDLE:**
-    *   Checks time and sensors.
-    *   Triggers `STATE_NIGHT_RESET` if dark and past 16:00.
-    *   Triggers `STATE_TRACKING` every 10 minutes (600,000 ms).
-2.  **STATE_TRACKING:**
-    *   Reads East/West LDRs.
-    *   Moves Actuator to minimize light difference.
-    *   Sleeps if difference is within threshold.
-3.  **STATE_NIGHT_RESET:**
-    *   Retracts actuator (Moves East) for 30 seconds.
-    *   Waits for morning light (>150 value) or 7:00 AM backup.
-4.  **STATE_WIND_SAFETY:**
-    *   Triggered if Wind Sensor (Pin 2) is HIGH.
-    *   Holds position (or moves to safety) until wind stops.
-5.  **STATE_STRATEGIC_DORMANCY:**
-    *   **Winter:** Nov-Feb. Sleeps to save power.
-    *   **Dark Days:** If light is too low during day, enters dormancy.
-6.  **STATE_REDUNDANT:**
-    *   Triggered if sensors fail (readings < 10 or > 1015).
-    *   Uses "Dead Reckoning" to move West by time (1000ms move / 10 mins).
-
-### Data Logging
-*   Logs to `datalog.csv` on SD Card.
-*   Format: `Date,Time,Event,East,West,Diff`
-*   **Serial Dump:** Send 'd' in Serial Monitor to read log.
+*   **Strategic Dormancy:** If the RTC detects months 11, 12, 1, or 2, the system stays in `STATE_STRATEGIC_DORMANCY` to prevent battery depletion during the Irish winter.
+*   **Sensor Health:** If readings are < 10 or > 1015, the system switches to Redundant Mode (Dead Reckoning) to ensure the panels keep moving even if moisture or salt air damages the LDR wiring.
+*   **Night Reset:** At 16:00, if sensors are dark, the system retracts fully (East) to prepare for the next sunrise.
