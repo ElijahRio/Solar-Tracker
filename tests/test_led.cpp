@@ -55,9 +55,9 @@ void test_evening_trigger() {
     // 1. Set time to 18:00
     mock_now_val = DateTime(2023, 6, 1, 18, 0, 0);
 
-    // 2. Set LDRs to dark (< 100)
-    mock_analogRead_vals[LDR_EAST] = 50;
-    mock_analogRead_vals[LDR_WEST] = 50;
+    // 2. Set LDRs to dark (< 8)
+    mock_analogRead_vals[LDR_EAST] = 4;
+    mock_analogRead_vals[LDR_WEST] = 4;
 
     // 3. Run loop to trigger transition
     loop();
@@ -92,8 +92,8 @@ void test_led_duration() {
 
     // Trigger evening
     mock_now_val = DateTime(2023, 6, 1, 18, 0, 0);
-    mock_analogRead_vals[LDR_EAST] = 50;
-    mock_analogRead_vals[LDR_WEST] = 50;
+    mock_analogRead_vals[LDR_EAST] = 4;
+    mock_analogRead_vals[LDR_WEST] = 4;
     loop(); // To Idle
     loop(); // To Night Reset -> LED ON
 
@@ -121,8 +121,8 @@ void test_led_midnight() {
 
     // Trigger evening at 23:00
     mock_now_val = DateTime(2023, 6, 1, 23, 0, 0);
-    mock_analogRead_vals[LDR_EAST] = 50;
-    mock_analogRead_vals[LDR_WEST] = 50;
+    mock_analogRead_vals[LDR_EAST] = 4;
+    mock_analogRead_vals[LDR_WEST] = 4;
     loop();
     loop();
 
