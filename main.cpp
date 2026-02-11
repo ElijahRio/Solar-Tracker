@@ -26,7 +26,6 @@
 
 // --- OBJECTS ---
 RTC_DS1307 rtc; // Most shields use DS1307. If yours is newer, try RTC_PCF8523
-File dataFile;
 
 // --- STATE MACHINE ---
 enum State {
@@ -77,7 +76,7 @@ void stopMotor();
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("--- System Booting ---");
+  Serial.println(F("--- System Booting ---"));
 
   // 1. PIN SETUP
   pinMode(ACT_EXTEND, OUTPUT);
@@ -87,27 +86,27 @@ void setup() {
 
   // 2. RTC SETUP
   if (!rtc.begin()) {
-    Serial.println("ERROR: Couldn't find RTC");
+    Serial.println(F("ERROR: Couldn't find RTC"));
     currentState = STATE_ERROR;
   }
   if (!rtc.isrunning()) {
-    Serial.println("RTC is NOT running! Setting time to compile time...");
+    Serial.println(F("RTC is NOT running! Setting time to compile time..."));
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
 
   // 3. SD CARD SETUP - Crucial Order Change
-  Serial.print("Initializing SD card...");
+  Serial.print(F("Initializing SD card..."));
   
   if (!SD.begin(CHIP_SELECT)) { // We must call begin() first
-    Serial.println("Card failed, or not present");
+    Serial.println(F("Card failed, or not present"));
   } else {
-    Serial.println("card initialized.");
+    Serial.println(F("card initialized."));
 
     // Now that it's initialized, we check for/create the file
     if (!SD.exists("datalog.csv")) {
       File headerFile = SD.open("datalog.csv", FILE_WRITE);
       if (headerFile) {
-        headerFile.println("Date,Time,Event,East,West,Diff");
+        headerFile.println(F("Date,Time,Event,East,West,Diff"));
         headerFile.close();
       }
     }
@@ -189,7 +188,7 @@ void runIdleState() {
 
   // 2. Check Sensor Health
   if (!isSensorOperational()) {
-      Serial.println("Sensors Failed! Switching to Redundancy.");
+      Serial.println(F("Sensors Failed! Switching to Redundancy."));
       currentState = STATE_REDUNDANT;
       return;
   }
@@ -242,7 +241,7 @@ void runDormancyState() {
     // It's not Winter. Is it still dark?
     int east = analogRead(LDR_EAST);
     if (east > 200) { // Arbitrary "Light" threshold
-        Serial.println("Conditions improved. Waking up.");
+        Serial.println(F("Conditions improved. Waking up."));
         currentState = STATE_IDLE;
         return;
     //}
@@ -322,7 +321,7 @@ void runNightResetState() {
 
 void runErrorState() {
   stopMotor();
-  Serial.println("CRITICAL ERROR");
+  Serial.println(F("CRITICAL ERROR"));
   delay(5000);
 }
 
@@ -350,7 +349,7 @@ void checkSerialCommand() {
 
         // Press 'w' to move West for 2 seconds
         if (c == 'w' || c == 'W') {
-            Serial.println("Manual Move: West");
+            Serial.println(F("Manual Move: West"));
             moveWest();
             delay(2000);
             stopMotor();
@@ -358,7 +357,7 @@ void checkSerialCommand() {
 
         // Press 'e' to move East for 2 seconds
         if (c == 'e' || c == 'E') {
-            Serial.println("Manual Move: East");
+            Serial.println(F("Manual Move: East"));
             moveEast();
             delay(2000);
             stopMotor();
@@ -367,7 +366,7 @@ void checkSerialCommand() {
 }
 
 void dumpDataLog() {
-    Serial.println("\n--- DATA DUMP START ---");
+    Serial.println(F("\n--- DATA DUMP START ---"));
     File dumpFile = SD.open("datalog.csv");
     if (dumpFile) {
         const size_t bufSize = 64;
@@ -380,9 +379,9 @@ void dumpDataLog() {
         }
         dumpFile.close();
     } else {
-        Serial.println("Error opening datalog.csv for reading.");
+        Serial.println(F("Error opening datalog.csv for reading."));
     }
-    Serial.println("\n--- DATA DUMP END ---");
+    Serial.println(F("\n--- DATA DUMP END ---"));
 }
 
 void logData(const char* mode, int e, int w, int d) {
@@ -411,9 +410,9 @@ void logData(const char* mode, int e, int w, int d) {
     dataFile.close();
     
     // Also print to Serial for debugging
-    Serial.print("LOGGED: "); Serial.println(mode);
+    Serial.print(F("LOGGED: ")); Serial.println(mode);
   } else {
-    Serial.println("Error opening datalog.csv");
+    Serial.println(F("Error opening datalog.csv"));
   }
 }
 
