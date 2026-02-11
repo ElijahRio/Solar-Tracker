@@ -52,7 +52,7 @@ const int LED_PIN = 7;
 const int CHIP_SELECT = 10; // CS pin for SD card (usually 10 on Shields)
 
 // --- CONFIGURATION ---
-const unsigned long TRACKING_INTERVAL = 600000; // 10 Minutes (ms)
+const unsigned long TRACKING_INTERVAL =  600000; // 10 Minutes (ms)
 const int LDR_THRESHOLD = 50;
 const int LDR_MIN_VALID = 10;     // Lowered threshold, if < this, suspect broken wire (0)
 const int LDR_MAX_VALID = 1015;   // If > this, suspect short (1023)
@@ -83,7 +83,7 @@ void setup() {
   pinMode(ACT_EXTEND, OUTPUT);
   pinMode(ACT_RETRACT, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  pinMode(CHIP_SELECT, OUTPUT); // Required for SD card
+  pinMode(CHIP_SELECT, OUTPUT);
 
   // 2. RTC SETUP
   if (!rtc.begin()) {
@@ -95,39 +95,51 @@ void setup() {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
 
-  // 3. SD CARD SETUP
+  // 3. SD CARD SETUP - Crucial Order Change
   Serial.print("Initializing SD card...");
   
-  // Check if new file, if so, write CSV Headers for Excel/Sheets
-  if (!SD.exists("datalog.csv")) {
-    File headerFile = SD.open("datalog.csv", FILE_WRITE);
-    if (headerFile) {
-      headerFile.println("Date,Time,Event,East,West,Diff");
-      headerFile.close();
-    }
-  }
-
-  if (!SD.begin(CHIP_SELECT)) {
+  if (!SD.begin(CHIP_SELECT)) { // We must call begin() first
     Serial.println("Card failed, or not present");
-    // We continue anyway, but logging won't work
   } else {
     Serial.println("card initialized.");
-    // Write Header to CSV
+
+    // Now that it's initialized, we check for/create the file
+    if (!SD.exists("datalog.csv")) {
+      File headerFile = SD.open("datalog.csv", FILE_WRITE);
+      if (headerFile) {
+        headerFile.println("Date,Time,Event,East,West,Diff");
+        headerFile.close();
+      }
+    }
     logData("System Start", 0, 0, 0); 
   }
 
-  // 4. CHECK SEASON (Immediate Winter Check)
+  // 4. SEASON CHECK - Disabled for Testing
   DateTime now = rtc.now();
   int currentMonth = now.month();
   
-  // Strategy: If month is Nov(11), Dec(12), Jan(1), Feb(2) -> Dormant
+  // Commented out to allow testing in February
+  /*
   if (currentMonth >= 11 || currentMonth <= 2) {
     currentState = STATE_STRATEGIC_DORMANCY;
   }
+  */
 }
 
 void loop() {
   checkSerialCommand(); // Check for 'd' to dump data
+
+      // --- SENSOR DEBUG START ---
+    int debugEast = analogRead(A0); // Read the East sensor
+    int debugWest = analogRead(A1); // Read the West sensor
+
+    Serial.print("East Sensor: ");
+    Serial.print(debugEast);
+    Serial.print(" | West Sensor: ");
+    Serial.println(debugWest);
+
+    delay(1000); // Wait 1 second so the screen doesn't scroll too fast
+    // --- SENSOR DEBUG END ---
 
   switch (currentState) {
     case STATE_IDLE:
@@ -162,7 +174,7 @@ void runIdleState() {
   int west = analogRead(LDR_WEST);
   
   // Note: 100 is a baseline threshold for darkness as per user requirement.
-  if (east < 100 && west < 100) {
+  if (east < 8 && west < 8) { // Changed from 100 to 8 per user request
     // Confirm it's actually evening (past 16:00) to avoid storm triggering reset
     if (now.hour() > 16) {
         currentState = STATE_NIGHT_RESET;
@@ -226,14 +238,14 @@ void runDormancyState() {
   DateTime now = rtc.now();
   
   // 1. Winter Check
-  if (now.month() >= 3 && now.month() <= 10) {
+  //if (now.month() >= 3 && now.month() <= 10) {
     // It's not Winter. Is it still dark?
     int east = analogRead(LDR_EAST);
     if (east > 200) { // Arbitrary "Light" threshold
         Serial.println("Conditions improved. Waking up.");
         currentState = STATE_IDLE;
         return;
-    }
+    //}
   }
 
   // Log occasionally
@@ -330,8 +342,26 @@ bool isSensorOperational() {
 void checkSerialCommand() {
     if (Serial.available() > 0) {
         char c = Serial.read();
+
+        // Press 'd' to see the data log
         if (c == 'd' || c == 'D') {
             dumpDataLog();
+        }
+
+        // Press 'w' to move West for 2 seconds
+        if (c == 'w' || c == 'W') {
+            Serial.println("Manual Move: West");
+            moveWest();
+            delay(2000);
+            stopMotor();
+        }
+
+        // Press 'e' to move East for 2 seconds
+        if (c == 'e' || c == 'E') {
+            Serial.println("Manual Move: East");
+            moveEast();
+            delay(2000);
+            stopMotor();
         }
     }
 }

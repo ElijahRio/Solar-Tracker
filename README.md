@@ -54,10 +54,10 @@ The H-Bridge is the high-power interface. It uses three distinct connection "clu
 
 ## 4. Operational Strategy: The Irish Context
 
-*   **Strategic Dormancy:** If the RTC detects months 11, 12, 1, or 2, the system stays in `STATE_STRATEGIC_DORMANCY` to prevent battery depletion during the Irish winter.
-*   **Sensor Health:** If readings are < 10 or > 1015, the system switches to Redundant Mode (Dead Reckoning) to ensure the panels keep moving even if moisture or salt air damages the LDR wiring.
+*   **Strategic Dormancy:** If the RTC detects months 11, 12, 1, or 2, the system stays in `STATE_STRATEGIC_DORMANCY` to prevent battery depletion during the Irish winter. *(Note: This feature is currently disabled in the firmware for testing purposes).*
+*   **Sensor Health:** If readings are < 10 or > 1015, the system switches to **Redundant Mode** (`STATE_REDUNDANT`) which uses time-based dead reckoning to ensure the panels keep moving even if moisture or salt air damages the LDR wiring.
 *   **Night Reset & Lighting:**
-    *   At **16:00**, if sensors read dark (East & West < 100), the system enters Night Mode.
+    *   At **16:00**, if sensors read dark (East & West < 8), the system enters Night Mode.
     *   **Action 1:** The LED Lights turn **ON**.
     *   **Action 2:** The panel fully retracts (East) to the home position.
     *   **Duration:** The LEDs stay on for a maximum of **4 hours** or until **Midnight (00:00)**, whichever comes first.
